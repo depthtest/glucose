@@ -25,42 +25,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <stdio.h>
 #include <math.h>
 
-#include <zlib.h>
+//JOJEDA: Removed zlib include and StreamBuffer + isEof + skipLine
 
 namespace Glucose {
-
-//-------------------------------------------------------------------------------------------------
-// A simple buffered character stream class:
-
-static const int buffer_size = 1048576;
-
-
-class StreamBuffer {
-    gzFile        in;
-    unsigned char buf[buffer_size];
-    int           pos;
-    int           size;
-
-    void assureLookahead() {
-        if (pos >= size) {
-            pos  = 0;
-            size = gzread(in, buf, sizeof(buf)); } }
-
-public:
-    explicit StreamBuffer(gzFile i) : in(i), pos(0), size(0) { assureLookahead(); }
-
-    int  operator *  () const { return (pos >= size) ? EOF : buf[pos]; }
-    void operator ++ ()       { pos++; assureLookahead(); }
-    int  position    () const { return pos; }
-};
-
-
-//-------------------------------------------------------------------------------------------------
-// End-of-file detection functions for StreamBuffer and char*:
-
-
-static inline bool isEof(StreamBuffer& in) { return *in == EOF;  }
-static inline bool isEof(const char*   in) { return *in == '\0'; }
 
 //-------------------------------------------------------------------------------------------------
 // Generic parse functions parametrized over the input-stream type.
@@ -70,14 +37,6 @@ template<class B>
 static void skipWhitespace(B& in) {
     while ((*in >= 9 && *in <= 13) || *in == 32)
         ++in; }
-
-
-template<class B>
-static void skipLine(B& in) {
-    for (;;){
-        if (isEof(in)) return;
-        if (*in == '\n') { ++in; return; }
-        ++in; } }
 
 template<class B>
 static double parseDouble(B& in) { // only in the form X.XXXXXe-XX

@@ -46,6 +46,15 @@ extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for 
 
 static inline double Glucose::cpuTime(void) { return (double)clock() / CLOCKS_PER_SEC; }
 
+//JOJEDA
+#include <chrono>
+static inline double Glucose::realTime() {
+    std::chrono::high_resolution_clock clock;
+    auto time_point = clock.now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::microseconds>(time_point).count() / 1e6;
+}
+////////
+
 #else
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -56,12 +65,12 @@ static inline double Glucose::cpuTime(void) {
     getrusage(RUSAGE_SELF, &ru);
     return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000; }
 
-#endif
-
 // Laurent: I know that this will not compile directly under Windows... sorry for that
 static inline double Glucose::realTime() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (double)tv.tv_sec + (double) tv.tv_usec / 1000000; }
+#endif
+
 
 #endif

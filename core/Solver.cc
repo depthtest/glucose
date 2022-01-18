@@ -53,10 +53,15 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "mtl/Sort.h"
 #include "core/Solver.h"
 #include "core/Constants.h"
-#include"simp/SimpSolver.h"
+#include "simp/SimpSolver.h"
 
 using namespace Glucose;
 
+//JOJEDA
+#if defined(_MSC_VER)
+    #define putc_unlocked putc
+#endif
+////////
 
 //=================================================================================================
 // Statistics

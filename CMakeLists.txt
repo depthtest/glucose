@@ -13,6 +13,8 @@ list(REMOVE_ITEM lib_srcs ${main_simp} ${main_parallel})
 #file(GLOB lib_parallel_srcs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} parallel/*.cc)
 #list(REMOVE_ITEM lib_parallel_srcs ${main_simp} ${main_parallel})
 
+add_compile_definitions(INCREMENTAL NDEBUG)
+
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -20,4 +22,13 @@ include_directories(
 # base library
 add_library(glucose STATIC ${lib_srcs})
 
-#add_library(glucosep ${lib_type} ${lib_srcs} ${lib_parallel_srcs})
+# parallel library
+#add_library(glucosep STATIC ${lib_srcs} ${lib_parallel_srcs})
+
+# testing the libraries
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    include(CTest)
+    if(BUILD_TESTING)
+        add_subdirectory(tests)
+    endif()
+endif()

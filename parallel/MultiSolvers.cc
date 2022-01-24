@@ -47,7 +47,7 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
 
-#include <pthread.h>
+#include <thread>
 #include "parallel/MultiSolvers.h"
 #include "mtl/Sort.h"
 #include "utils/System.h"
@@ -74,21 +74,29 @@ IntOption opt_fifoSizeByCore(_parallel, "fifosize", "Size of the FIFO structure 
 BoolOption opt_dontExportDirectReusedClauses(_cunstable, "reusedClauses", "Don't export directly reused clauses", false);
 BoolOption opt_plingeling(_cunstable, "plingeling", "plingeling strategy for sharing clauses (exploratory feature)", false);
 
+
+//JOJEDA: Added from utils/System.h, should multiply by number of threads or implement a better solution
+#if defined(_MSC_VER)
+#include <time.h>
+static inline double cpuTime(void) { return (double)clock() / CLOCKS_PER_SEC; }
+#else //JOJEDA: this was the original code
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <unistd.h>
-
 
 static inline double cpuTime(void) {
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
     return (double) ru.ru_utime.tv_sec + (double) ru.ru_utime.tv_usec / 1000000;
 }
+#endif
+////////
+
 
 
 void MultiSolvers::informEnd(lbool res) {
     result = res;
-    pthread_cond_broadcast(&cfinished);
+    cfinished.notify_all();
 }
 
 
@@ -112,9 +120,6 @@ MultiSolvers::MultiSolvers(ParallelSolver *s) :
     sc->addSolver(s);
     assert(solvers[0]->threadNumber() == 0);
 
-    pthread_mutex_init(&m, NULL);  //PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_init(&mfinished, NULL); //PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_init(&cfinished, NULL);
 
     if(nbsolvers > 0)
         fprintf(stdout, "c %d solvers engines and 1 companion as a blackboard created.\n", nbsolvers);
@@ -257,7 +262,7 @@ void *localLaunch(void *arg) {
 
     (void) s->solve();
 
-    pthread_exit(NULL);
+    return nullptr;
 }
 
 
@@ -602,7 +607,6 @@ void MultiSolvers::adjustNumberOfCores() {
 
 
 lbool MultiSolvers::solve() {
-    pthread_attr_t thAttr;
     int i;
 
     adjustNumberOfCores();
@@ -618,62 +622,56 @@ lbool MultiSolvers::solve() {
 
     model.clear();
 
-    /* Initialize and set thread detached attribute */
-    pthread_attr_init(&thAttr);
-    pthread_attr_setdetachstate(&thAttr, PTHREAD_CREATE_JOINABLE);
-
 
 
     // Launching all solvers
     for(i = 0; i < nbsolvers; i++) {
-        pthread_t *pt = (pthread_t *) malloc(sizeof(pthread_t));
+        std::thread* pt = new std::thread(localLaunch, (void*)solvers[i]);
         threads.push(pt);
         solvers[i]->pmfinished = &mfinished;
         solvers[i]->pcfinished = &cfinished;
-        pthread_create(threads[i], &thAttr, &localLaunch, (void *) solvers[i]);
     }
 
     bool done = false;
     bool adjustedlimitonce = false;
 
-    (void) pthread_mutex_lock(&m);
-    while(!done) {
-        struct timespec timeout;
-        time(&timeout.tv_sec);
-        timeout.tv_sec += MAXIMUM_SLEEP_DURATION;
-        timeout.tv_nsec = 0;
-        if(pthread_cond_timedwait(&cfinished, &mfinished, &timeout) != ETIMEDOUT)
-            done = true;
-        else
-            printStats();
+    {
+        std::lock_guard<std::mutex> lock(m);
+        while (!done) {
+            auto timeout= std::chrono::system_clock::now() + std::chrono::seconds(MAXIMUM_SLEEP_DURATION);
+            std::unique_lock<std::mutex> lk(mfinished);
+            if (cfinished.wait_until(lk, timeout) != std::cv_status::timeout)
+                done = true;
+            else
+                printStats();
 
-        float mem = memUsed();
-        if(verb >= 1) printf("c Total Memory so far : %.2fMb\n", mem);
-        if((maxmemory > 0) && (mem > maxmemory) && !sharedcomp->panicMode)
-            printf("c ** reduceDB switching to Panic Mode due to memory limitations !\n"), sharedcomp->panicMode = true;
+            float mem = memUsed();
+            if (verb >= 1) printf("c Total Memory so far : %.2fMb\n", mem);
+            if ((maxmemory > 0) && (mem > maxmemory) && !sharedcomp->panicMode)
+                printf("c ** reduceDB switching to Panic Mode due to memory limitations !\n"), sharedcomp->panicMode = true;
 
-        if(!done && !adjustedlimitonce) {
-            uint64_t sumconf = 0;
-            uint64_t sumimported = 0;
-            for(int i = 0; i < nbsolvers; i++) {
-                sumconf += solvers[i]->conflicts;
-                sumimported += solvers[i]->stats[nbimported];
-            }
-            if(sumconf > 10000000 && sumimported > 4 * sumconf) { // too many many imported clauses (after a while)
-                for(int i = 0; i < nbsolvers; i++) { // we have like 32 threads, so we need to export just very good clauses
-                    solvers[i]->goodlimitlbd -= 2;
-                    solvers[i]->goodlimitsize -= 4;
+            if (!done && !adjustedlimitonce) {
+                uint64_t sumconf = 0;
+                uint64_t sumimported = 0;
+                for (int i = 0; i < nbsolvers; i++) {
+                    sumconf += solvers[i]->conflicts;
+                    sumimported += solvers[i]->stats[nbimported];
                 }
-                adjustedlimitonce = true;
-                printf("c adjusting (once) the limits to send fewer clauses.\n");
+                if (sumconf > 10000000 && sumimported > 4 * sumconf) { // too many many imported clauses (after a while)
+                    for (int i = 0; i < nbsolvers; i++) { // we have like 32 threads, so we need to export just very good clauses
+                        solvers[i]->goodlimitlbd -= 2;
+                        solvers[i]->goodlimitsize -= 4;
+                    }
+                    adjustedlimitonce = true;
+                    printf("c adjusting (once) the limits to send fewer clauses.\n");
+                }
             }
         }
     }
 
-    (void) pthread_mutex_unlock(&m);
-
     for(i = 0; i < nbsolvers; i++) { // Wait for all threads to finish
-        pthread_join(*threads[i], NULL);
+        threads[i]->join();
+        delete threads[i];
     }
 
     assert(sharedcomp != NULL);

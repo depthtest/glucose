@@ -64,10 +64,6 @@ SharedCompanion::SharedCompanion(int _nbThreads) :
     jobStatus(l_Undef),
     random_seed(9164825) {
 
-	pthread_mutex_init(&mutexSharedClauseCompanion,NULL); // This is the shared companion lock
-	pthread_mutex_init(&mutexSharedUnitCompanion,NULL); // This is the shared companion lock
-	pthread_mutex_init(&mutexSharedCompanion,NULL); // This is the shared companion lock
-	pthread_mutex_init(&mutexJobFinished,NULL); // This is the shared companion lock
 	if (_nbThreads> 0)  {
 	    setNbThreads(_nbThreads);
 	    fprintf(stdout,"c Shared companion initialized: handling of clauses of %d threads.\nc %d ints for the sharing clause buffer (not expandable) .\n", _nbThreads, clausesBuffer.maxSize());
@@ -86,8 +82,7 @@ void SharedCompanion::printStats() {
 // No multithread safe
 bool SharedCompanion::addSolver(ParallelSolver* s) {
 	watchedSolvers.push(s);
-	pthread_mutex_t* mu = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-	pthread_mutex_init(mu,NULL);
+    //JOJEDA: A mutex was allocated and not used here???
 	assert(s->thn == watchedSolvers.size()-1); // all solvers must have been registered in the good order
 	nextUnit.push(0);
 
@@ -98,22 +93,20 @@ void SharedCompanion::newVar(bool sign) {
 }
 
 void SharedCompanion::addLearnt(ParallelSolver *s,Lit unary) {
-  pthread_mutex_lock(&mutexSharedUnitCompanion);
+    std::lock_guard<std::mutex> lock(mutexSharedUnitCompanion);
   if (isUnary[var(unary)]==l_Undef) {
       unitLit.push(unary);
       isUnary[var(unary)] = sign(unary)?l_False:l_True;
   } 
-  pthread_mutex_unlock(&mutexSharedUnitCompanion);
 }
 
 Lit SharedCompanion::getUnary(ParallelSolver *s) {
   int sn = s->thn;
   Lit ret = lit_Undef;
 
-  pthread_mutex_lock(&mutexSharedUnitCompanion);
+  std::lock_guard<std::mutex> lock(mutexSharedUnitCompanion);
   if (nextUnit[sn] < unitLit.size())
       ret = unitLit[nextUnit[sn]++];
-  pthread_mutex_unlock(&mutexSharedUnitCompanion);
  return ret;
 }
 
@@ -125,9 +118,8 @@ bool SharedCompanion::addLearnt(ParallelSolver *s, Clause & c) {
   bool ret = false;
   assert(watchedSolvers.size()>sn);
 
-  pthread_mutex_lock(&mutexSharedClauseCompanion);
+  std::lock_guard<std::mutex> lock(mutexSharedClauseCompanion);
   ret = clausesBuffer.pushClause(sn, c);
-  pthread_mutex_unlock(&mutexSharedClauseCompanion);
   return ret;
 }
 
@@ -136,30 +128,27 @@ bool SharedCompanion::getNewClause(ParallelSolver *s, int & threadOrigin, vec<Li
   int sn = s->thn;
   
     // First, let's get the clauses on the big blackboard
-    pthread_mutex_lock(&mutexSharedClauseCompanion);
+    std::lock_guard<std::mutex> lock(mutexSharedClauseCompanion);
     bool b = clausesBuffer.getClause(sn, threadOrigin, newclause);
-    pthread_mutex_unlock(&mutexSharedClauseCompanion);
  
   return b;
 }
 
 bool SharedCompanion::jobFinished() {
     bool ret = false;
-    pthread_mutex_lock(&mutexJobFinished);
+    std::lock_guard<std::mutex> lock(mutexJobFinished);
     ret = bjobFinished;
-    pthread_mutex_unlock(&mutexJobFinished);
     return ret;
 }
 
 bool SharedCompanion::IFinished(ParallelSolver *s) {
     bool ret = false;
-    pthread_mutex_lock(&mutexJobFinished);
+    std::lock_guard<std::mutex> lock(mutexJobFinished);
     if (!bjobFinished) {
 	ret = true;
 	bjobFinished = true;
 	jobFinishedBy = s;
     }
-    pthread_mutex_unlock(&mutexJobFinished);
     return ret;
 }
 

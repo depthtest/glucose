@@ -486,7 +486,8 @@ lbool ParallelSolver::solve_(bool do_simp, bool turn_off_simp) {
     if (status != l_Undef)
         firstToFinish = sharedcomp->IFinished(this);
     if (firstToFinish) {
-        printf("c Thread %d is 100%% pure glucose! First thread to finish! (%s answer).\n", threadNumber(), status == l_True ? "SAT" : status == l_False ? "UNSAT" : "UNKOWN");
+        if(verbosity>0)
+            printf("c Thread %d is 100%% pure glucose! First thread to finish! (%s answer).\n", threadNumber(), status == l_True ? "SAT" : status == l_False ? "UNSAT" : "UNKOWN");
         sharedcomp->jobStatus = status;
     }
     
@@ -501,7 +502,7 @@ lbool ParallelSolver::solve_(bool do_simp, bool turn_off_simp) {
         ok = false;
 
 
-    pthread_cond_signal(pcfinished);
+    pcfinished->notify_one();
 
     //cancelUntil(0);
 

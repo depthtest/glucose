@@ -89,10 +89,10 @@ public:
 	int nbThreads;               // Number of threads
 	
 	// A set of mutex variables
-	pthread_mutex_t mutexSharedCompanion; // mutex for any high level sync between all threads (like reportf)
-	pthread_mutex_t mutexSharedClauseCompanion; // mutex for reading/writing clauses on the blackboard
-	pthread_mutex_t mutexSharedUnitCompanion; // mutex for reading/writing unit clauses on the blackboard 
-        pthread_mutex_t mutexJobFinished;
+	std::mutex mutexSharedCompanion; // mutex for any high level sync between all threads (like reportf)
+	std::mutex mutexSharedClauseCompanion; // mutex for reading/writing clauses on the blackboard
+	std::mutex mutexSharedUnitCompanion; // mutex for reading/writing unit clauses on the blackboard 
+    std::mutex mutexJobFinished;
 
 	bool bjobFinished;
 	ParallelSolver *jobFinishedBy;

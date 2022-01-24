@@ -159,13 +159,13 @@ struct Stats {
     void informEnd(lbool res);
     ParallelSolver* retrieveSolver(int i);
 
-    pthread_mutex_t m; // mutex for any high level sync between all threads (like reportf)
-    pthread_mutex_t mfinished; // mutex on which main process may wait for... As soon as one process finishes it release the mutex
-    pthread_cond_t cfinished; // condition variable that says that a thread has finished
+    std::mutex m; // mutex for any high level sync between all threads (like reportf)
+    std::mutex mfinished; // mutex on which main process may wait for... As soon as one process finishes it release the mutex
+    std::condition_variable cfinished; // condition variable that says that a thread has finished
 	
     vec<ParallelSolver*> solvers; // set of plain solvers
     vec<SolverCompanion*> solvercompanions; // set of companion solvers
-    vec<pthread_t*> threads; // all threads of this process
+    vec<std::thread*> threads; // all threads of this process
     vec<int> threadIndexOfSolver; // threadIndexOfSolver[solvers[i]] is the index in threads[] of the solver i
     vec<int> threadIndexOfSolverCompanion; // threadIndexOfSolverCompanion[solvercompanions[i]] is the index in threads[] of the solvercompanion i
 };

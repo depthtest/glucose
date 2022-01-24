@@ -50,10 +50,13 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef PARALLELSOLVER_H
 #define	PARALLELSOLVER_H
 
+#include <mutex>
+#include <condition_variable>
 #include "core/SolverTypes.h"
 #include "core/Solver.h"
 #include "simp/SimpSolver.h"
 #include "parallel/SharedCompanion.h"
+
 namespace Glucose {
     
    enum ParallelStats{
@@ -85,8 +88,9 @@ protected :
     SharedCompanion *sharedcomp;
     bool coreFUIP; // true if one core is specialized for branching on all FUIP
     bool ImTheSolverFUIP;
-    pthread_mutex_t *pmfinished; // mutex on which main process may wait for... As soon as one process finishes it release the mutex
-    pthread_cond_t *pcfinished; // condition variable that says that a thread as finished
+
+    std::mutex *pmfinished; // mutex on which main process may wait for... As soon as one process finishes it release the mutex
+    std::condition_variable *pcfinished; // condition variable that says that a thread as finished
 
 public:
     // Constructor/Destructor:
